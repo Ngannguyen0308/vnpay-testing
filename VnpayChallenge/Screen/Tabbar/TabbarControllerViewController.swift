@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import Foundation
 
 class TabbarControllerViewController: UITabBarController {
     private let factory: ViewControllerFactory
