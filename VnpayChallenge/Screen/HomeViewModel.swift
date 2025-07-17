@@ -29,7 +29,6 @@ class HomeViewModel {
                 DispatchQueue.main.async {
                     self.photoList = photo
                     self.onDataUpdated?()
-                    print("CHECKKKK \(photo)")
                 }
                 
             case .failure(let error):
