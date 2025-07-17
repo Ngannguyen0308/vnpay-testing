@@ -25,7 +25,7 @@ class HomeViewController: UIViewController {
         textField.placeholder = "Search here"
         textField.borderStyle = .none
         textField.layer.cornerRadius = 10
-        textField.backgroundColor = .cyan
+        textField.backgroundColor = .lightGray
         textField.layer.borderWidth = 1
         textField.layer.borderColor = UIColor(hex: 0xCACACA).cgColor
         textField.isSecureTextEntry = false
@@ -72,9 +72,7 @@ class HomeViewController: UIViewController {
         bindViewModel()
         setupLayout()
         
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 200
-        
+        tableView.rowHeight = UITableView.automaticDimension        
         viewModel.fetchingPhotoList()
     }
     
@@ -105,22 +103,29 @@ class HomeViewController: UIViewController {
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(PhotoCell.self)
+        tableView.register(PhotoCellSkeleton.self)
     }
 }
 
 // MARK: - DataSource
 extension HomeViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return viewModel.photoList.count
+        return viewModel.isLoading ? 10 : viewModel.photoList.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cells = tableView.dequeueReusableCell(
-            withCellType: PhotoCell.self, for: indexPath)
-        let item = viewModel.photoList[indexPath.row]
-        cells.configure(with: item, imageService: viewModel.imageService)
-        
-        return cells
+        if viewModel.isLoading {
+            let cells = tableView.dequeueReusableCell(
+                withCellType: PhotoCellSkeleton.self, for: indexPath)
+            return cells
+        } else {
+            let cells = tableView.dequeueReusableCell(
+                withCellType: PhotoCell.self, for: indexPath)
+            let item = viewModel.photoList[indexPath.row]
+            cells.configure(with: item, imageService: viewModel.imageService, in: tableView)
+
+            return cells
+        }
     }
 }
 

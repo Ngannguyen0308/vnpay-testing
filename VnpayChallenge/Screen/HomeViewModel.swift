@@ -11,7 +11,7 @@ class HomeViewModel {
     
     let photoListService: PhotoListService
     let imageService: ImageService
-
+    
     init(photoListService: PhotoListService, imageService: ImageService) {
         self.photoListService = photoListService
         self.imageService = imageService
@@ -19,22 +19,25 @@ class HomeViewModel {
     
     var photoList: [PhotoItem] = []
     var onDataUpdated: (() -> Void)?
-
+    var isLoading: Bool = false
+    
     func fetchingPhotoList() {
+        isLoading = true
+        onDataUpdated?()
+        
         photoListService.getPhotoList { [weak self] result in
             guard let self = self else { return }
-            switch result {
-            case .success(let photo):
-                
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                self.isLoading = false
+                switch result {
+                case .success(let photo):
                     self.photoList = photo
-                    self.onDataUpdated?()
+                case .failure(let error):
+                    print("Error fetching photo list: \(error)")
+                    self.photoList = []
                 }
-                
-            case .failure(let error):
-                print("Error fetching photo list: \(error)")
+                self.onDataUpdated?()
             }
-            
         }
     }
 }
