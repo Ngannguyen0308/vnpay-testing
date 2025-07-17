@@ -21,12 +21,13 @@ class HomeViewModel {
     var onDataUpdated: (() -> Void)?
     var isLoading: Bool = false
     
-    func fetchingPhotoList() {
+    func fetchingPhotoList(page: Int = 1) {
         isLoading = true
         onDataUpdated?()
         
-        photoListService.getPhotoList { [weak self] result in
+        photoListService.getPhotoList(page: page, limit: 20) { [weak self] result in
             guard let self = self else { return }
+            
             DispatchQueue.main.async {
                 self.isLoading = false
                 switch result {

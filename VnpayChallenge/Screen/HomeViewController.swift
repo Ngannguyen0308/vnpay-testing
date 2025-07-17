@@ -50,6 +50,8 @@ class HomeViewController: UIViewController {
         style: .plain
     )
     
+    private let paginationView = PaginationView()
+    
     init(viewModel: HomeViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
@@ -72,15 +74,14 @@ class HomeViewController: UIViewController {
         bindViewModel()
         setupLayout()
         
-        tableView.rowHeight = UITableView.automaticDimension        
+        tableView.rowHeight = UITableView.automaticDimension
         viewModel.fetchingPhotoList()
     }
     
     private func setupLayout() {
-        [titleLabel, searchTextField, tableView].forEach { view.addSubview($0) }
-        
-        [titleLabel, searchTextField, tableView].forEach {
+        [titleLabel, searchTextField, tableView, paginationView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview($0)
         }
         
         NSLayoutConstraint.activate([
@@ -96,7 +97,12 @@ class HomeViewController: UIViewController {
             tableView.topAnchor.constraint(equalTo: searchTextField.bottomAnchor, constant: 16),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+            tableView.bottomAnchor.constraint(equalTo: paginationView.topAnchor, constant: -10),
+            
+            paginationView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            paginationView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            paginationView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            paginationView.heightAnchor.constraint(equalToConstant: 50)
         ])
         
         tableView.separatorStyle = .none
@@ -104,6 +110,8 @@ class HomeViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(PhotoCell.self)
         tableView.register(PhotoCellSkeleton.self)
+        paginationView.delegate = self
+
     }
 }
 
@@ -123,7 +131,7 @@ extension HomeViewController: UITableViewDataSource {
                 withCellType: PhotoCell.self, for: indexPath)
             let item = viewModel.photoList[indexPath.row]
             cells.configure(with: item, imageService: viewModel.imageService, in: tableView)
-
+            
             return cells
         }
     }
@@ -132,3 +140,8 @@ extension HomeViewController: UITableViewDataSource {
 // MARK: - UITableViewDelegate
 extension HomeViewController: UITableViewDelegate { }
 
+extension HomeViewController: PaginationViewDelegate {
+    func pagincationViewChangePage(to page: Int) {
+        viewModel.fetchingPhotoList(page: page)
+    }
+}

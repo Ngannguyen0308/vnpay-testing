@@ -15,8 +15,8 @@ class PhotoListService {
         self.httpClient = httpClient
     }
     
-    func getPhotoList(completion: @escaping (Result<[PhotoItem], NetworkError>) -> Void) {
-        guard let url = URL(string: "https://picsum.photos/v2/list?page=1&limit=100") else {
+    func getPhotoList(page: Int = 1, limit: Int = 20, completion: @escaping (Result<[PhotoItem], NetworkError>) -> Void) {
+        guard let url = URL(string: "https://picsum.photos/v2/list?page=\(page)&limit=\(limit)") else {
             completion(.failure(.invalidURL))
             return
         }
