@@ -21,8 +21,8 @@ final class ViewControllerFactory {
     
     func makeHomeViewController() -> HomeViewController {
         let homeViewModel = HomeViewModel(
-            photoListService: dependencies.photoListService
-//            context: dependencies.persistenceStore.viewContext
+            photoListService: dependencies.photoListService,
+            imageService: dependencies.imageService
         )
         
         return HomeViewController(viewModel: homeViewModel)

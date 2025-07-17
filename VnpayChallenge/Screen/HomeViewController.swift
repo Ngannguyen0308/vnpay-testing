@@ -25,12 +25,19 @@ class HomeViewController: UIViewController {
         fatalError("init(coder:) has not been implemented.")
     }
     
+    private func bindViewModel() {
+        viewModel.onDataUpdated = { [weak self] in
+            self?.tableView.reloadData()
+        }
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .blue
+        view.backgroundColor = .white
+        tableView.separatorStyle = .none
+        bindViewModel()
         setupTableView()
-        
-        
+        viewModel.fetchingPhotoList()
     }
     
     private func setupTableView() {
@@ -38,22 +45,35 @@ class HomeViewController: UIViewController {
         tableView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor)
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+        
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.register(PhotoCell.self)
     }
-    
-    
 }
 
 // MARK: - DataSource
-//extension HomeViewController: UITableViewDataSource {
-//    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-//        return 10
-//    }
-//    
-//    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-//        <#code#>
-//    }
-//    
-//
-//}
+extension HomeViewController: UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return viewModel.photoList.count
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cells = tableView.dequeueReusableCell(
+            withCellType: PhotoCell.self, for: indexPath)
+        let item = viewModel.photoList[indexPath.row]
+        cells.configure(with: item, imageService: viewModel.imageService)
+        
+        return cells
+    }
+}
+
+// MARK: - UITableViewDelegate
+extension HomeViewController: UITableViewDelegate {
+    
+}
+

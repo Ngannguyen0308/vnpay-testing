@@ -7,19 +7,19 @@
 
 
 struct PhotoItem: Decodable {
-    let id: Int
+    let id: String
     let author: String
     let width: Int
     let height: Int
-    let url: String
-    let dowloadURL: String
+    let urlImage: String
+    let downloadURL: String
     
     enum CodingKeys: String, CodingKey {
         case id
         case author
         case width
         case height
-        case url
-        case dowloadURL = "download_url"
+        case urlImage = "url"
+        case downloadURL = "download_url"
     }
 }

@@ -8,14 +8,18 @@
 import Foundation
 
 class HomeViewModel {
-    let photoListService: PhotoListService
     
-    init(photoListService: PhotoListService) {
+    let photoListService: PhotoListService
+    let imageService: ImageService
+
+    init(photoListService: PhotoListService, imageService: ImageService) {
         self.photoListService = photoListService
+        self.imageService = imageService
     }
     
     var photoList: [PhotoItem] = []
-    
+    var onDataUpdated: (() -> Void)?
+
     func fetchingPhotoList() {
         photoListService.getPhotoList { [weak self] result in
             guard let self = self else { return }
@@ -24,6 +28,7 @@ class HomeViewModel {
                 
                 DispatchQueue.main.async {
                     self.photoList = photo
+                    self.onDataUpdated?()
                     print("CHECKKKK \(photo)")
                 }
                 
