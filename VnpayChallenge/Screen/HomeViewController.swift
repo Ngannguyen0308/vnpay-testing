@@ -63,7 +63,25 @@ class HomeViewController: UIViewController {
     
     private func bindViewModel() {
         viewModel.onDataUpdated = { [weak self] in
-            self?.tableView.reloadData()
+            guard let self = self else { return }
+            self.tableView.reloadData()
+            
+            if self.viewModel.isLoading || self.viewModel.photoList.isEmpty {
+                self.tableView.tableFooterView = nil
+            } else {
+                self.showPaginationIfNeeded()
+            }
+        }
+    }
+    
+    private func showPaginationIfNeeded() {
+        //        guard tableView.tableFooterView !== paginationView else { return }
+        //
+        //        paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
+        //        tableView.tableFooterView = paginationView
+        paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
+        if tableView.tableFooterView !== paginationView {
+            tableView.tableFooterView = paginationView
         }
     }
     
@@ -74,12 +92,11 @@ class HomeViewController: UIViewController {
         bindViewModel()
         setupLayout()
         
-        tableView.rowHeight = UITableView.automaticDimension
-        viewModel.fetchingPhotoList()
+        viewModel.fetchItemForPage(viewModel.currentPage)
     }
     
     private func setupLayout() {
-        [titleLabel, searchTextField, tableView, paginationView].forEach {
+        [titleLabel, searchTextField, tableView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
@@ -97,51 +114,75 @@ class HomeViewController: UIViewController {
             tableView.topAnchor.constraint(equalTo: searchTextField.bottomAnchor, constant: 16),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: paginationView.topAnchor, constant: -10),
-            
-            paginationView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            paginationView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            paginationView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            paginationView.heightAnchor.constraint(equalToConstant: 50)
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
         
+        tableView.rowHeight = UITableView.automaticDimension
         tableView.separatorStyle = .none
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(PhotoCell.self)
         tableView.register(PhotoCellSkeleton.self)
+        tableView.register(LoadMorCell.self)
+        
         paginationView.delegate = self
-
     }
 }
 
 // MARK: - DataSource
 extension HomeViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return viewModel.isLoading ? 10 : viewModel.photoList.count
+        if viewModel.isLoading {
+            return 5
+        }
+        print("CHECK COUNT OF DATA \(viewModel.photoList.count)")
+        
+        return viewModel.photoList.count + (viewModel.isPaginating ? 1 : 0)
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        
+        // First load
         if viewModel.isLoading {
-            let cells = tableView.dequeueReusableCell(
+            return tableView.dequeueReusableCell(
                 withCellType: PhotoCellSkeleton.self, for: indexPath)
-            return cells
-        } else {
-            let cells = tableView.dequeueReusableCell(
-                withCellType: PhotoCell.self, for: indexPath)
-            let item = viewModel.photoList[indexPath.row]
-            cells.configure(with: item, imageService: viewModel.imageService, in: tableView)
-            
-            return cells
+        }
+        
+        // Bottom loading for pagination
+        if viewModel.isPaginating && indexPath.row == viewModel.photoList.count {
+            let cell = tableView.dequeueReusableCell(withCellType: LoadMorCell.self, for: indexPath)
+            cell.textLabel?.text = "Loading..."
+            cell.textLabel?.textColor = .gray
+            cell.textLabel?.textAlignment = .center
+            return cell
+        }
+        
+        let cell = tableView.dequeueReusableCell(
+            withCellType: PhotoCell.self, for: indexPath)
+        
+        let item = viewModel.photoList[indexPath.row]
+        cell.configure(with: item, imageService: viewModel.imageService, in: tableView)
+        return cell
+    }
+}
+
+
+// MARK: - UITableViewDelegate
+extension HomeViewController: UITableViewDelegate {
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let offsetY = scrollView.contentOffset.y
+        let contentHeight = scrollView.contentSize.height
+        let height = scrollView.frame.size.height
+        
+        if offsetY > contentHeight - height - 100,
+           !viewModel.isLoading, !viewModel.isPaginating, !viewModel.isLastPage {
+            viewModel.loadNextItem()
         }
     }
 }
 
-// MARK: - UITableViewDelegate
-extension HomeViewController: UITableViewDelegate { }
-
 extension HomeViewController: PaginationViewDelegate {
     func pagincationViewChangePage(to page: Int) {
-        viewModel.fetchingPhotoList(page: page)
+        viewModel.fetchItemForPage(page)
     }
 }

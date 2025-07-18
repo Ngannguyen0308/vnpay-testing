@@ -9,6 +9,7 @@ import UIKit
 
 
 class PhotoCell: UITableViewCell {
+    
     private var imageService: ImageService?
     private var currentImageURL: URL?
     

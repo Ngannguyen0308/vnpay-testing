@@ -1,26 +1,16 @@
 //
-//  LoadingCustom.swift
+//  LoadingRefreshView.swift
 //  VnpayChallenge
 //
-//  Created by ADMIN on 17/7/25.
+//  Created by ADMIN on 18/7/25.
 //
 
 import UIKit
 import Foundation
 
-class LoadingCustom: UIView {
+class LoadingRefreshView: UIView {
     
     private let circleLayer = CAShapeLayer()
-    
-    private lazy var loadingLabel: UILabel = {
-        let label = UILabel()
-        label.text = "Loading..."
-        label.font = UIFont.systemFont(ofSize: 14, weight: .regular)
-        label.textColor = UIColor(hex: 0x1E1B1B)
-        label.textAlignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
-    }()
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -38,13 +28,6 @@ class LoadingCustom: UIView {
     }
     
     private func setupIndicatorLayout() {
-        addSubview(loadingLabel)
-        
-        NSLayoutConstraint.activate([
-            loadingLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            loadingLabel.topAnchor.constraint(equalTo: centerYAnchor, constant: 25)
-        ])
-        
         layer.addSublayer(circleLayer)
         circlePath()
         
