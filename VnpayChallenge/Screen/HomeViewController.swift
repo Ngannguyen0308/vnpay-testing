@@ -45,12 +45,11 @@ class HomeViewController: UIViewController {
         return textField
     }()
     
-    private lazy var tableView = UITableView(
-        frame: .zero,
-        style: .plain
-    )
+    private lazy var tableView = UITableView(frame: .zero, style: .plain)
     
     private let paginationView = PaginationView()
+    
+    private let refreshControl = UIRefreshControl()
     
     init(viewModel: HomeViewModel) {
         self.viewModel = viewModel
@@ -61,10 +60,22 @@ class HomeViewController: UIViewController {
         fatalError("init(coder:) has not been implemented.")
     }
     
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .white
+        
+        bindViewModel()
+        setupLayout()
+        setupRefreshControl()
+        
+        viewModel.fetchItemForPage(viewModel.currentPage)
+    }
+    
     private func bindViewModel() {
         viewModel.onDataUpdated = { [weak self] in
             guard let self = self else { return }
             self.tableView.reloadData()
+            self.refreshControl.endRefreshing() // <- Stop animation here
             
             if self.viewModel.isLoading || self.viewModel.photoList.isEmpty {
                 self.tableView.tableFooterView = nil
@@ -75,24 +86,20 @@ class HomeViewController: UIViewController {
     }
     
     private func showPaginationIfNeeded() {
-        //        guard tableView.tableFooterView !== paginationView else { return }
-        //
-        //        paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
-        //        tableView.tableFooterView = paginationView
         paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
         if tableView.tableFooterView !== paginationView {
             tableView.tableFooterView = paginationView
         }
     }
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .white
-        
-        bindViewModel()
-        setupLayout()
-        
-        viewModel.fetchItemForPage(viewModel.currentPage)
+    private func setupRefreshControl() {
+        refreshControl.tintColor = .gray
+        refreshControl.addTarget(self, action: #selector(handleRefresh), for: .valueChanged)
+        tableView.refreshControl = refreshControl
+    }
+    
+    @objc private func handleRefresh() {
+        viewModel.refreshCurrentPage()
     }
     
     private func setupLayout() {
@@ -135,20 +142,14 @@ extension HomeViewController: UITableViewDataSource {
         if viewModel.isLoading {
             return 5
         }
-        print("CHECK COUNT OF DATA \(viewModel.photoList.count)")
-        
         return viewModel.photoList.count + (viewModel.isPaginating ? 1 : 0)
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        
-        // First load
         if viewModel.isLoading {
-            return tableView.dequeueReusableCell(
-                withCellType: PhotoCellSkeleton.self, for: indexPath)
+            return tableView.dequeueReusableCell(withCellType: PhotoCellSkeleton.self, for: indexPath)
         }
         
-        // Bottom loading for pagination
         if viewModel.isPaginating && indexPath.row == viewModel.photoList.count {
             let cell = tableView.dequeueReusableCell(withCellType: LoadMorCell.self, for: indexPath)
             cell.textLabel?.text = "Loading..."
@@ -157,15 +158,12 @@ extension HomeViewController: UITableViewDataSource {
             return cell
         }
         
-        let cell = tableView.dequeueReusableCell(
-            withCellType: PhotoCell.self, for: indexPath)
-        
+        let cell = tableView.dequeueReusableCell(withCellType: PhotoCell.self, for: indexPath)
         let item = viewModel.photoList[indexPath.row]
         cell.configure(with: item, imageService: viewModel.imageService, in: tableView)
         return cell
     }
 }
-
 
 // MARK: - UITableViewDelegate
 extension HomeViewController: UITableViewDelegate {
@@ -181,8 +179,10 @@ extension HomeViewController: UITableViewDelegate {
     }
 }
 
+// MARK: - Pagination
 extension HomeViewController: PaginationViewDelegate {
     func pagincationViewChangePage(to page: Int) {
         viewModel.fetchItemForPage(page)
     }
 }
+

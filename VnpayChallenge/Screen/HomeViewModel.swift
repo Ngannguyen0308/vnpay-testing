@@ -91,5 +91,36 @@ class HomeViewModel {
             }
         }
     }
+    
+    // handle refresh data with current state in that time
+    func refreshCurrentPage() {
+        guard !isLoading else { return }
+        
+        isLoading = true
+        isLastPage = false
+        photoList = []
+        onDataUpdated?()
+        
+        photoListService.getPhotoList(page: currentPage, limit: currentLimit) { [weak self] result in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isLoading = false
+                
+                switch result {
+                case .success(let photos):
+                    self.photoList = photos
+                    self.isLastPage = photos.count >= self.maxItemsPerPage
+                    
+                case .failure(let error):
+                    print("Error refreshing page \(self.currentPage): \(error)")
+                    self.photoList = []
+                }
+                
+                self.onDataUpdated?()
+            }
+        }
+    }
+    
 }
 
