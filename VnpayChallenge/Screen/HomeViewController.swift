@@ -29,27 +29,47 @@ class HomeViewController: UIViewController {
         textField.layer.borderWidth = 1
         textField.layer.borderColor = UIColor(hex: 0xCACACA).cgColor
         textField.isSecureTextEntry = false
-        
-        // add icon on the left
+        textField.leftView = HomeViewController.createSearchIcon()
+        textField.leftViewMode = .always
+        return textField
+    }()
+    
+    private static func createSearchIcon() -> UIView {
         let icon = UIImageView(image: UIImage(named: "ic-search"))
         icon.contentMode = .scaleAspectFit
         icon.frame = CGRect(x: 0, y: 0, width: 25, height: 25)
-        
         let container = UIView(frame: CGRect(x: 0, y: 0, width: 40, height: 45))
         icon.center = container.center
         container.addSubview(icon)
-        
-        textField.leftView = container
-        textField.leftViewMode = .always
-        
-        return textField
-    }()
+        return container
+    }
     
     private lazy var tableView = UITableView(frame: .zero, style: .plain)
     
     private let paginationView = PaginationView()
     
     private let refreshControl = UIRefreshControl()
+    
+    private let noResultLabel: UILabel = {
+        let label = UILabel()
+        label.text = "No results found"
+        label.textAlignment = .center
+        label.textColor = .gray
+        label.isHidden = true
+        return label
+    }()
+    
+    private let fetchAllButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("Tìm toàn bộ", for: .normal)
+        button.setTitleColor(.white, for: .normal)
+        button.backgroundColor = .systemBlue
+        button.layer.cornerRadius = 10
+        button.titleLabel?.font = .boldSystemFont(ofSize: 16)
+        return button
+    }()
+    
+    private var debounceWorkItem: DispatchWorkItem?
     
     init(viewModel: HomeViewModel) {
         self.viewModel = viewModel
@@ -74,22 +94,34 @@ class HomeViewController: UIViewController {
     private func bindViewModel() {
         viewModel.onDataUpdated = { [weak self] in
             guard let self = self else { return }
-            self.tableView.reloadData()
-            self.refreshControl.endRefreshing() // <- Stop animation here
             
-            if self.viewModel.isLoading || self.viewModel.photoList.isEmpty {
-                self.tableView.tableFooterView = nil
-            } else {
-                self.showPaginationIfNeeded()
-            }
+            self.tableView.reloadData()
+            self.refreshControl.endRefreshing()
+            
+//            let hasNoResult = !self.viewModel.isLoading &&
+//            !self.viewModel.isPaginating &&
+//            self.viewModel.filteredPhotoList.isEmpty
+            
+//            if !self.viewModel.isLoading {
+//                self.noResultLabel.isHidden = !hasNoResult
+//            }
+            
+            // display pagination
+            self.showPaginationIfNeeded()
+
         }
     }
     
     private func showPaginationIfNeeded() {
-        paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
-        if tableView.tableFooterView !== paginationView {
-            tableView.tableFooterView = paginationView
+        guard !viewModel.filteredPhotoList.isEmpty else {
+            tableView.tableFooterView = nil
+            return
         }
+        
+        print("CHECKKK: \(viewModel.photoList.count), \(viewModel.filteredPhotoList.count)")
+        
+        paginationView.frame = CGRect(x: 0, y: 0, width: tableView.frame.width, height: 50)
+        tableView.tableFooterView = paginationView
     }
     
     private func setupRefreshControl() {
@@ -103,7 +135,7 @@ class HomeViewController: UIViewController {
     }
     
     private func setupLayout() {
-        [titleLabel, searchTextField, tableView].forEach {
+        [titleLabel, searchTextField, fetchAllButton, tableView, noResultLabel].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
@@ -118,10 +150,18 @@ class HomeViewController: UIViewController {
             searchTextField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             searchTextField.heightAnchor.constraint(equalToConstant: 45),
             
-            tableView.topAnchor.constraint(equalTo: searchTextField.bottomAnchor, constant: 16),
+            fetchAllButton.topAnchor.constraint(equalTo: searchTextField.bottomAnchor, constant: 8),
+            fetchAllButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            fetchAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            fetchAllButton.heightAnchor.constraint(equalToConstant: 45),
+            
+            tableView.topAnchor.constraint(equalTo: fetchAllButton.bottomAnchor, constant: 16),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            noResultLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            noResultLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
         
         tableView.rowHeight = UITableView.automaticDimension
@@ -133,7 +173,71 @@ class HomeViewController: UIViewController {
         tableView.register(LoadMorCell.self)
         
         paginationView.delegate = self
+        searchTextField.delegate = self
+        searchTextField.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
+        
+        fetchAllButton.addTarget(self, action: #selector(fetchAllTapped), for: .touchUpInside)
     }
+    
+    @objc private func searchTextChanged() {
+        debounceWorkItem?.cancel()
+        
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            
+            let keyword = self.searchTextField.text ?? ""
+            self.viewModel.currentSearchKeyword = keyword
+            let filtered = self.viewModel.filterPhotos(with: keyword)
+            self.viewModel.filteredPhotoList = filtered
+            
+            DispatchQueue.main.async {
+                self.noResultLabel.isHidden = !filtered.isEmpty
+                
+                if filtered.isEmpty {
+                    self.tableView.tableFooterView = nil
+                }
+                self.tableView.reloadData()
+            }
+        }
+        
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+    }
+    
+    @objc private func fetchAllTapped() {
+        fetchAllButton.isEnabled = false
+        fetchAllButton.setTitle("Đang tải toàn bộ...", for: .normal)
+        
+        var allPhotos: [PhotoItem] = []
+        let totalPages = 10
+        let dispatchGroup = DispatchGroup()
+        
+        for page in 1...totalPages {
+            dispatchGroup.enter()
+            viewModel.photoListService.getPhotoList(page: page, limit: 100) { result in
+                switch result {
+                case .success(let photos):
+                    allPhotos.append(contentsOf: photos)
+                case .failure(let error):
+                    print("Error fetching page \(page): \(error)")
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .main) {
+            self.viewModel.photoList = allPhotos
+            self.viewModel.filteredPhotoList = self.viewModel.filterPhotos(with: self.viewModel.currentSearchKeyword)
+            self.tableView.reloadData()
+            
+            self.hideFetchAllButton()
+        }
+    }
+    
+    @objc private func hideFetchAllButton() {
+        fetchAllButton.isHidden = true
+    }
+    
 }
 
 // MARK: - DataSource
@@ -142,7 +246,7 @@ extension HomeViewController: UITableViewDataSource {
         if viewModel.isLoading {
             return 5
         }
-        return viewModel.photoList.count + (viewModel.isPaginating ? 1 : 0)
+        return viewModel.filteredPhotoList.count + (viewModel.isPaginating ? 1 : 0)
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -150,16 +254,13 @@ extension HomeViewController: UITableViewDataSource {
             return tableView.dequeueReusableCell(withCellType: PhotoCellSkeleton.self, for: indexPath)
         }
         
-        if viewModel.isPaginating && indexPath.row == viewModel.photoList.count {
+        if viewModel.isPaginating && indexPath.row == viewModel.filteredPhotoList.count {
             let cell = tableView.dequeueReusableCell(withCellType: LoadMorCell.self, for: indexPath)
-            cell.textLabel?.text = "Loading..."
-            cell.textLabel?.textColor = .gray
-            cell.textLabel?.textAlignment = .center
             return cell
         }
         
         let cell = tableView.dequeueReusableCell(withCellType: PhotoCell.self, for: indexPath)
-        let item = viewModel.photoList[indexPath.row]
+        let item = viewModel.filteredPhotoList[indexPath.row]
         cell.configure(with: item, imageService: viewModel.imageService, in: tableView)
         return cell
     }
@@ -168,13 +269,19 @@ extension HomeViewController: UITableViewDataSource {
 // MARK: - UITableViewDelegate
 extension HomeViewController: UITableViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard !viewModel.isLoading, !viewModel.isPaginating, !viewModel.isLastPage else { return }
+        
         let offsetY = scrollView.contentOffset.y
         let contentHeight = scrollView.contentSize.height
         let height = scrollView.frame.size.height
         
-        if offsetY > contentHeight - height - 100,
-           !viewModel.isLoading, !viewModel.isPaginating, !viewModel.isLastPage {
-            viewModel.loadNextItem()
+        if offsetY > contentHeight - height - 100 {
+            if viewModel.currentSearchKeyword.isEmpty {
+                viewModel.loadNextItem()
+            } else {
+                print("RUNNN")
+                viewModel.loadMoreFilteredResults()
+            }
         }
     }
 }
@@ -183,6 +290,17 @@ extension HomeViewController: UITableViewDelegate {
 extension HomeViewController: PaginationViewDelegate {
     func pagincationViewChangePage(to page: Int) {
         viewModel.fetchItemForPage(page)
+    }
+}
+
+extension HomeViewController: UITextFieldDelegate {
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        let allowedCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        let filtered = string.unicodeScalars.filter { allowedCharacters.contains($0) }
+        let filteredString = String(String.UnicodeScalarView(filtered))
+        let currentText = textField.text ?? ""
+        let updatedText = (currentText as NSString).replacingCharacters(in: range, with: filteredString)
+        return updatedText.count <= 15
     }
 }
 
