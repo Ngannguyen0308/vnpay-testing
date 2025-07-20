@@ -8,13 +8,13 @@
 import Foundation
 
 class HomeViewModel {
+    
     let photoListService: PhotoListService
     let imageService: ImageService
     
-    var photoList: [PhotoItem] = []
-    var onDataUpdated: (() -> Void)?
-    
+    var allPhotos: [PhotoItem] = []
     var filteredPhotoList: [PhotoItem] = []
+    var onDataUpdated: (() -> Void)?
     
     private(set) var isLoading = false
     private(set) var isPaginating = false
@@ -22,8 +22,8 @@ class HomeViewModel {
     
     var currentPage = 1
     private let maxItemsPerPage = 100
-    private let limitStep = 20
-    private var currentLimit = 20
+    private let limitStep = 25
+    private var currentLimit = 25
     
     var currentSearchKeyword: String = ""
     var isSearching = false
@@ -37,37 +37,34 @@ class HomeViewModel {
         guard !isLoading else { return }
         
         isLoading = true
-        isLastPage = false
         currentPage = page
-        currentLimit = 20
-        if page == 1 {
-            photoList = []
-            filteredPhotoList = []
-        }
         onDataUpdated?()
-                
-        photoListService.getPhotoList(page: page, limit: currentLimit) { [weak self] result in
+        
+        photoListService.getPhotoList(page: page, limit: maxItemsPerPage) { [weak self] result in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
                 self.isLoading = false
-                
                 switch result {
                 case .success(let photos):
-                    if page == 1 {
-                        self.photoList = photos
+                    let startIndex = (page - 1) * self.maxItemsPerPage
+                    let endIndex = startIndex + photos.count
+                    
+                    if self.allPhotos.count >= endIndex {
+                        self.allPhotos.replaceSubrange(startIndex..<endIndex, with: photos)
                     } else {
-                        self.photoList += photos
+                        if self.allPhotos.count < startIndex {
+                            self.allPhotos += Array(repeating: .empty, count: startIndex - self.allPhotos.count)
+                        }
+                        self.allPhotos += photos
                     }
-                    self.filteredPhotoList = self.filterPhotos(with: self.currentSearchKeyword)
-                    self.isLastPage = self.filteredPhotoList.count >= self.maxItemsPerPage
+                    
+                    self.currentLimit = self.limitStep
+                    self.updateFilteredPhotos()
+                    self.isLastPage = photos.count < self.maxItemsPerPage
                     
                 case .failure(let error):
                     print("Error fetching page \(page): \(error)")
-                    if page == 1 {
-                        self.photoList = []
-                        self.filteredPhotoList = []
-                    }
                 }
                 
                 self.onDataUpdated?()
@@ -76,9 +73,15 @@ class HomeViewModel {
     }
     
     func loadNextItem() {
-        guard !isLoading, !isPaginating, !isLastPage else { return }
+        guard !isLoading, !isPaginating, !isLastPage, !isSearching else { return }
         
-        let newLimit = min(currentLimit + limitStep, maxItemsPerPage)
+        let startIndex = (currentPage - 1) * maxItemsPerPage
+        let endIndex = min(allPhotos.count, currentPage * maxItemsPerPage)
+        guard startIndex < endIndex else { return }
+        
+        let currentItems = Array(allPhotos[startIndex..<endIndex])
+        let newLimit = min(currentLimit + limitStep, currentItems.count)
+        
         guard newLimit > currentLimit else {
             isLastPage = true
             return
@@ -87,23 +90,12 @@ class HomeViewModel {
         isPaginating = true
         onDataUpdated?()
         
-        photoListService.getPhotoList(page: currentPage, limit: newLimit) { [weak self] result in
-            guard let self = self else { return }
-            
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
             DispatchQueue.main.async {
+                self.currentLimit = newLimit
+                self.filteredPhotoList = Array(currentItems.prefix(self.currentLimit))
                 self.isPaginating = false
-                
-                switch result {
-                case .success(let photos):
-                    self.photoList = photos
-                    self.filteredPhotoList = self.filterPhotos(with: self.currentSearchKeyword)
-                    self.currentLimit = newLimit
-                    self.isLastPage = self.filteredPhotoList.count >= self.maxItemsPerPage
-                    
-                case .failure(let error):
-                    print("Pagination error: \(error)")
-                }
-                
+                self.isLastPage = self.filteredPhotoList.count >= currentItems.count
                 self.onDataUpdated?()
             }
         }
@@ -114,81 +106,119 @@ class HomeViewModel {
         
         isLoading = true
         isLastPage = false
-        photoList = []
-        filteredPhotoList = []
         onDataUpdated?()
         
-        photoListService.getPhotoList(page: currentPage, limit: currentLimit) { [weak self] result in
+        photoListService.getPhotoList(page: currentPage, limit: maxItemsPerPage) { [weak self] result in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
                 self.isLoading = false
-                
                 switch result {
                 case .success(let photos):
-                    self.photoList = photos
-                    self.filteredPhotoList = self.filterPhotos(with: self.currentSearchKeyword)
-                    self.isLastPage = self.filteredPhotoList.count >= self.maxItemsPerPage
-                    
+                    let rangeStart = (self.currentPage - 1) * self.maxItemsPerPage
+                    if self.allPhotos.count >= rangeStart + self.maxItemsPerPage {
+                        self.allPhotos.replaceSubrange(rangeStart..<rangeStart + self.maxItemsPerPage, with: photos)
+                    } else {
+                        if self.allPhotos.count < rangeStart {
+                            self.allPhotos += Array(repeating: .empty, count: rangeStart - self.allPhotos.count)
+                        }
+                        self.allPhotos += photos
+                    }
+                    self.updateFilteredPhotos()
                 case .failure(let error):
                     print("Error refreshing page \(self.currentPage): \(error)")
-                    self.photoList = []
-                    self.filteredPhotoList = []
                 }
-                
                 self.onDataUpdated?()
             }
         }
     }
     
-    func filterPhotos(with keyword: String) -> [PhotoItem] {
+    func filterPhotos(with rawKeyword: String) -> [PhotoItem] {
+        let keyword = normalizeSearchKeyword(rawKeyword)
+        currentSearchKeyword = keyword
+        
         guard !keyword.isEmpty else {
             isSearching = false
-            currentLimit = limitStep
-            isLastPage = false
-            return Array(photoList.prefix(currentLimit))
+            updateFilteredPhotos()
+            return filteredPhotoList
         }
         
         isSearching = true
-        let lowercased = keyword.lowercased()
         
         let filtered: [PhotoItem]
-        if CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: lowercased)) {
-            filtered = photoList.filter { $0.id == lowercased }
+        if CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: keyword)) {
+            filtered = allPhotos.filter { $0.id == keyword }
         } else {
-            filtered = photoList.filter { $0.author.lowercased().contains(lowercased) }
+            filtered = allPhotos.filter { photo in
+                let normalizedAuthor = photo.author
+                    .folding(options: .diacriticInsensitive, locale: .current)
+                    .lowercased()
+                
+                // Match prefix of each word
+                let words = normalizedAuthor.split(separator: " ")
+                return words.contains { $0.hasPrefix(keyword.lowercased()) }
+            }
         }
         
-        if filtered.count <= 100 {
-            currentLimit = filtered.count
-            isLastPage = true
-            return filtered
-        } else {
-            currentLimit = limitStep
-            isLastPage = false
-            return Array(filtered.prefix(currentLimit))
+        filteredPhotoList = filtered
+        return filtered
+    }
+    
+    func fetchAllPages(totalPages: Int = 10, completion: @escaping () -> Void) {
+        guard !isLoading else { return }
+        
+        isLoading = true
+        onDataUpdated?()
+        
+        var all: [PhotoItem] = []
+        let group = DispatchGroup()
+        
+        for page in 1...totalPages {
+            group.enter()
+            photoListService.getPhotoList(page: page, limit: maxItemsPerPage) { result in
+                switch result {
+                case .success(let photos):
+                    all.append(contentsOf: photos)
+                case .failure(let error):
+                    print("Error fetching page \(page): \(error)")
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            self.allPhotos = all
+            self.filteredPhotoList = self.filterPhotos(with: self.currentSearchKeyword)
+            self.isLoading = false
+            self.hideFetchAllButton?()
+            self.onDataUpdated?()
+            completion()
         }
     }
     
-    func loadMoreFilteredResults() {
-        guard isSearching, !isLoading, !isPaginating, !isLastPage else { return }
-        
-        isPaginating = true
-        onDataUpdated?()
-        
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-            let allFiltered = self.filterPhotos(with: self.currentSearchKeyword)
-            let newLimit = min(self.currentLimit + self.limitStep, allFiltered.count)
-            let newFiltered = Array(allFiltered.prefix(newLimit))
-            
-            DispatchQueue.main.async {
-                self.currentLimit = newLimit
-                self.filteredPhotoList = newFiltered
-                self.isPaginating = false
-                self.isLastPage = self.filteredPhotoList.count >= allFiltered.count
-                self.onDataUpdated?()
-            }
+    private func updateFilteredPhotos() {
+        let startIndex = (currentPage - 1) * maxItemsPerPage
+        let endIndex = min(allPhotos.count, currentPage * maxItemsPerPage)
+        guard startIndex < endIndex else {
+            filteredPhotoList = []
+            return
         }
+        let pageItems = Array(allPhotos[startIndex..<endIndex])
+        filteredPhotoList = Array(pageItems.prefix(currentLimit))
     }
+    
+    func normalizeSearchKeyword(_ rawInput: String) -> String {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noDiacritics = trimmed.folding(options: .diacriticInsensitive, locale: .current)
+        let allowedCharacters = CharacterSet.alphanumerics
+        let filteredScalars = noDiacritics.unicodeScalars.filter { allowedCharacters.contains($0) }
+        let result = String(String.UnicodeScalarView(filteredScalars))
+        return String(result.prefix(15))
+    }
+    
+    func validateSearchInput(_ rawInput: String) -> String {
+        return normalizeSearchKeyword(rawInput)
+    }
+    
+    var hideFetchAllButton: (() -> Void)?
 }
-

@@ -22,4 +22,6 @@ struct PhotoItem: Decodable {
         case urlImage = "url"
         case downloadURL = "download_url"
     }
+    
+    static let empty = PhotoItem(id: "", author: "", width: 0, height: 0, urlImage: "", downloadURL: "")
 }
