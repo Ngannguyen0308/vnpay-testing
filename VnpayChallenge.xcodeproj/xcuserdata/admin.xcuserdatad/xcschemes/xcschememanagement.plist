@@ -9,6 +9,29 @@
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
+		<key>VnpayChallengeTests.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>84B30C652E276F590024623E</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>84B30C7E2E276F5A0024623E</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>84B30C882E276F5A0024623E</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
 	</dict>
 </dict>
 </plist>
