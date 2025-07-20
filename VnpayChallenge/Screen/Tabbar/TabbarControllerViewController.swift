@@ -77,8 +77,10 @@ extension TabbarControllerViewController {
             case .home:
                 return factory.makeHomeViewController()
                 
-            case .cart, .profile:
-                return UIViewController()
+            case .cart:
+                return CartViewController()
+            case .profile:
+                return UserViewController()
             }
         }
     }
