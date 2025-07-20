@@ -20,9 +20,7 @@ class PhotoListService {
             completion(.failure(.invalidURL))
             return
         }
-        
-        print("CHECK API URL: \(url)")
-        
+                
         httpClient.get(to: url) { result in
             switch result {
             case .success(let data):

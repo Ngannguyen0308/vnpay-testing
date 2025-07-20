@@ -23,7 +23,7 @@ class HomeViewModel {
     var currentPage = 1
     private let maxItemsPerPage = 100
     private let limitStep = 25
-    private var currentLimit = 25
+    var currentLimit = 25
     
     var currentSearchKeyword: String = ""
     var isSearching = false
